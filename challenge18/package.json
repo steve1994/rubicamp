@@ -1,0 +1,18 @@
+{
+  "name": "challenge18",
+  "version": "1.0.0",
+  "description": "",
+  "main": "jurusan.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-install": "^2.1.0",
+    "babel-preset-es2015": "^6.24.1",
+    "cli-table": "^0.3.1",
+    "sqlite3": "^4.1.0"
+  }
+}
