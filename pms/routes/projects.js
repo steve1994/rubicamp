@@ -285,13 +285,21 @@ module.exports = (pool) => {
             let totalPage = Math.ceil(total / limit);
             let offSet = limit * (page - 1);
 
-            let sql = `SELECT * FROM (members INNER JOIN users ON members.userid = users.userid) WHERE ${stringCondition} ORDER BY users.userid LIMIT $${counter} OFFSET $${counter+1}`;
+            let sql = `SELECT members.role,users.fullname,users.userid FROM (members INNER JOIN users ON members.userid = users.userid) WHERE ${stringCondition} ORDER BY users.userid LIMIT $${counter} OFFSET $${counter+1}`;
             stringConditionValue.push(limit);
             stringConditionValue.push(offSet);
             pool.query(sql, stringConditionValue, function (err,response) {
                 if (err) throw err;
-                let arrayMembers = response.rows;
+                let arrayMembers = [];
+                for (let i=0;i<response.rows.length;i++) {
+                    arrayMembers.push({
+                        id    :   response.rows[i].userid,
+                        name  :   response.rows[i].fullname,
+                        role  :   response.rows[i].role
+                    })
+                }
 
+                console.log(arrayMembers);
                 sql = `SELECT projectoptions FROM projects WHERE projectid = $1`;
                 pool.query(sql, [idProject], function (err,response) {
                     if (err) throw err;

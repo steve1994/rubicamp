@@ -147,17 +147,17 @@
             <% for (let i=0;i<arrayMembers.length;i++) { %>
             <tr>
               <% if (options.id_column) { %>
-                <td style="text-align:left;"><%= arrayMembers[i].userid %></td>
+                <td style="text-align:left;"><%= arrayMembers[i].id %></td>
               <% } %>
               <% if (options.name_column) { %>
-                <td style="text-align:left;"><%= arrayMembers[i].fullname %></td>
+                <td style="text-align:left;"><%= arrayMembers[i].name %></td>
               <% } %>
               <% if (options.position_column) { %>
                 <td style="text-align:left;"><%= arrayMembers[i].role %></td>
               <% } %>
               <td style="text-align:left;">
-                <a href="/projects/member/<%= idProject %>/edit/<%= arrayMembers[i].userid %>"><button class="btn btn-success">Edit</button></a>
-                <a href="/projects/member/<%= idProject %>/delete/<%= arrayMembers[i].userid %>"><button class="btn btn-danger">Delete</button></a>
+                <a href="/projects/member/<%= idProject %>/edit/<%= arrayMembers[i].id %>"><button class="btn btn-success">Edit</button></a>
+                <a href="/projects/member/<%= idProject %>/delete/<%= arrayMembers[i].id %>"><button class="btn btn-danger">Delete</button></a>
               </td>
             </tr>
             <% } %>
