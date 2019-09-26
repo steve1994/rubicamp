@@ -3,37 +3,6 @@ var router = express.Router();
 const mongodb = require('mongodb').MongoClient;
 const url = "mongodb://localhost:27017/";
 
-router.get('/dummy', function (req,res) {
-    mongodb.connect(url, function(err, db) {
-        if (err) throw err;
-        var dbo = db.db("test");
-
-        // AND QUERY
-        // var query = {$and : [{"_id":1},{"Integer":4}]};
-        // dbo.collection("data").find(query).toArray(function (err,result) {
-        //     if (err) throw err;
-        //     console.log(result);
-        //     db.close();
-        // })
-
-        // COUNT QUERY
-        // var query = {$and : [{"_id":1},{"Integer":4}]};
-        // dbo.collection("data").find(query).count(function (err,count) {
-        //     if (err) throw err;
-        //     console.log(count);
-        //     db.close();
-        // });
-
-        // QUERY LIMIT
-        // var query = {$and : [{"_id":1},{"Integer":4}]};
-        // dbo.collection("data").find(query).skip(0).limit(1).toArray(function (err, result) {
-        //     if (err) throw err;
-        //     console.log(result);
-        //     db.close();
-        // });
-    });
-})
-
 function buildConditionalQuery(columnNameParams,columnValueParams) {
     conditionalQuery = [];
     if (columnNameParams[0] == 'on') {
