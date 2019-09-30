@@ -4,6 +4,7 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var session = require('express-session');
+var fileUpload = require('express-fileupload');
 const pg = require('pg');
 const pool = new pg.Pool({
     user: 'postgres',
@@ -30,6 +31,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({secret: "persib1994salawasna"}));
 
+app.use(fileUpload());
 app.use('/', indexRouter(pool));
 app.use('/projects', projectsRouter(pool));
 app.use('/profile', profileRouter(pool));

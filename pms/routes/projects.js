@@ -1,6 +1,7 @@
 var express = require('express');
 var router = express.Router();
 var helper = require('../helper/utils');
+var path = require('path');
 
 function convertResultConditionalToString(resultConditional) {
     let stringResultConditional = "";
@@ -53,6 +54,23 @@ function stringConditionalMember(searchFilter) {
     return [counter,convertResultConditionalToString(resultConditional)];
 }
 
+function stringConditionalIssue(searchFilter) {
+    let resultConditional = [];
+    resultConditional[0] = (searchFilter[0]) ? `issueid = $` : ``;
+    resultConditional[1] = (searchFilter[1]) ? `subject = $` : ``;
+    resultConditional[2] = (searchFilter[2]) ? `tracker = $` : ``;
+    let counter = 1
+    for (let i=0;i<resultConditional.length;i++) {
+        if (searchFilter[i]) {
+            resultConditional[i] += counter;
+            counter++;
+        }
+    }
+    resultConditional.push('projectid = $' + counter);
+    counter++;
+    return [counter,convertResultConditionalToString(resultConditional)];
+}
+
 function valueConditional(searchFilter,searchFilterValue) {
     let resultFilterValue = [];
     for (let i=0;i<searchFilterValue.length;i++) {
@@ -61,6 +79,19 @@ function valueConditional(searchFilter,searchFilterValue) {
         }
     }
     return resultFilterValue;
+}
+
+function convertDateToString(date) {
+    let year = date.getFullYear();
+    let month = date.getMonth() + 1;
+    if (month.toString().length < 2) {
+        month = '0' + month;
+    }
+    let day = date.getDate();
+    if (day.toString().length < 2) {
+        day = '0' + day;
+    }
+    return year + '-' + month + '-' + day;
 }
 
 module.exports = (pool) => {
@@ -260,7 +291,177 @@ module.exports = (pool) => {
 
     router.get('/issue/:projectid',helper.isLoggedIn,function (req,res) {
         let idProject = req.params.projectid;
-        res.render('projects/issue/index',{idProject});
+        let searchFilter = [req.query.id_checkbox,req.query.subject_checkbox,req.query.tracker_checkbox];
+        let searchFilterValue = [req.query.id,req.query.subject,req.query.tracker];
+
+        let stringConditionAndCounter = stringConditionalIssue(searchFilter);
+        let stringCondition = stringConditionAndCounter[1];
+        let counter = stringConditionAndCounter[0];
+        let stringConditionValue = valueConditional(searchFilter,searchFilterValue);
+        stringConditionValue.push(idProject);
+        let sql = `SELECT count(*) as total FROM issues WHERE ${stringCondition}`;
+
+        pool.query(sql, stringConditionValue, function (err,response) {
+            if (err) throw err;
+
+            let url = req.url == '/' ? '/projects/issue/' + idProject + '/?page=1' : '/projects' + req.url;
+            let total = response.rows[0].total;
+            let page = req.query.page || 1;
+            let limit = 3;
+            let totalPage = Math.ceil(total / limit);
+            let offSet = limit * (page - 1);
+
+            let sql = `SELECT issueid,subject,tracker,closeddate FROM issues WHERE ${stringCondition} ORDER by issueid LIMIT $${counter} OFFSET $${counter+1}`;
+            stringConditionValue.push(limit);
+            stringConditionValue.push(offSet);
+            pool.query(sql, stringConditionValue, function (err,response) {
+                if (err) throw err;
+                let arrayIssues = response.rows;
+
+                sql = `SELECT issueoptions FROM projects WHERE projectid = $1`;
+                pool.query(sql,[idProject],function (err,response) {
+                    if (err) throw err;
+                    let options = response.rows[0].issueoptions == null ? '{}' : response.rows[0].issueoptions;
+                    options = JSON.parse(options);
+                    res.render('projects/issue/index',{idProject,arrayIssues,options,totalPage,page,url});
+                })
+            })
+        })
+    })
+
+    router.post('/issue/:projectid/option',helper.isLoggedIn,function (req,res) {
+        let sql = "UPDATE projects SET issueoptions=$1 WHERE projectid = $2";
+        pool.query(sql, [JSON.stringify(req.body),req.params.projectid], function (err,response) {
+            if (err) console.log(err);
+            res.redirect('/projects/issue/' + req.params.projectid);
+        })
+    })
+
+    router.get('/issue/:projectid/add',helper.isLoggedIn,function (req,res) {
+        let idProject = req.params.projectid;
+        let sql = `SELECT users.userid,users.fullname FROM (members INNER JOIN users ON members.userid=users.userid) WHERE members.projectid = $1`;
+        pool.query(sql,[idProject],function (err,response) {
+            if (err) throw err;
+            let usersData = response.rows;
+            res.render('projects/issue/add',{idProject,usersData});
+        })
+    })
+
+    router.post('/issue/:projectid/add',helper.isLoggedIn,function (req,res) {
+        let idProject = req.params.projectid;
+        let tracker = req.body.tracker;
+        let subject = req.body.subject;
+        let description = req.body.description;
+        let status = req.body.status;
+        let priority = req.body.priority;
+        let assignee = req.body.assignee || null;
+        let startDate = req.body.start_date || null;
+        let dueDate = req.body.due_date || null;
+        let estimatedTime = req.body.estimated_time || null;
+        let done = req.body.done;
+        let file = req.files ? req.files.files : null;
+        let fileName = req.files ? Date.now() + '_' + req.files.files.name : null;
+
+        let sql = `INSERT INTO issues(projectid,tracker,subject,description,status,priority,assignee,startdate,duedate,estimatedtime,done,files,createddate) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now())`;
+        pool.query(sql,[idProject,tracker,subject,description,status,priority,assignee,startDate,dueDate,estimatedTime,done,fileName],function (err,response) {
+            if (err) throw err;
+            if (req.files) {
+                file.mv(path.join(__dirname,`../public/images/uploaded_image/${fileName}`), function (err) {
+                    if (err) throw err;
+                    res.redirect('/projects/issue/' + idProject);
+                })
+            } else {
+                res.redirect('/projects/issue/' + idProject);
+            }
+        })
+    })
+
+    router.get('/issue/:idproject/delete/:idissue',helper.isLoggedIn,function (req,res) {
+        let idProject = req.params.idproject;
+        let idIssue = req.params.idissue;
+        let sql = `DELETE FROM issues WHERE projectid=${idProject} AND issueid=${idIssue}`;
+        pool.query(sql,function (err,response) {
+            if (err) throw err;
+            res.redirect('/projects/issue/' + idProject);
+        })
+    })
+
+    router.get('/issue/:idproject/edit/:idissue',helper.isLoggedIn,function (req,res) {
+        let idProject = req.params.idproject;
+        let idIssue = req.params.idissue;
+        let sql = `SELECT * FROM issues WHERE projectid=${idProject} AND issueid=${idIssue}`;
+        pool.query(sql, function (err,response) {
+            if (err) throw err;
+            let issueObject = response.rows[0];
+            issueObject.startdate = convertDateToString(issueObject.startdate);
+            issueObject.duedate = convertDateToString(issueObject.duedate);
+            sql = `SELECT users.userid,users.fullname FROM (members INNER JOIN users ON members.userid=users.userid) WHERE members.projectid = $1`;
+            pool.query(sql,[idProject],function (err,response) {
+                if (err) throw err;
+                let usersData = response.rows;
+                sql = `SELECT * FROM issues WHERE projectid=${idProject} ORDER BY issueid`;
+                pool.query(sql,function (err,response) {
+                    if (err) throw err;
+                    let issuesData = response.rows;
+                    res.render('projects/issue/edit',{idProject,idIssue,usersData,issueObject,issuesData});
+                })
+            })
+        })
+    })
+
+    router.post('/issue/:idproject/edit/:idissue',helper.isLoggedIn,function (req,res) {
+        let idProject = req.params.idproject;
+        let idIssue = req.params.idissue;
+        let tracker = req.body.tracker;
+        let subject = req.body.subject;
+        let description = req.body.description;
+        let status = req.body.status;
+        let priority = req.body.priority;
+        let assignee = req.body.assignee || null;
+        let startDate = req.body.start_date || null;
+        let dueDate = req.body.due_date || null;
+        let estimatedTime = req.body.estimated_time || null;
+        let done = req.body.done;
+        let file = req.files ? req.files.files : null;
+        let fileName = req.files ? Date.now() + '_' + req.files.files.name : null;
+        let spentTime = req.body.spent_time || null;
+        let targetVersion = req.body.target_version;
+        let author = req.body.author || null;
+        let parentTask = req.body.parent_task || null;
+
+        let sql;
+        if (req.files) {
+            sql = `UPDATE issues SET tracker=$1,subject=$2,description=$3,status=$4,priority=$5,assignee=$6,startdate=$7,duedate=$8,estimatedtime=$9,done=$10,files=$11,spenttime=$12,targetversion=$13,author=$14,updateddate=now(),parenttask=$15 WHERE projectid=${idProject} AND issueid=${idIssue}`;
+            pool.query(sql,[tracker,subject,description,status,priority,assignee,startDate,dueDate,estimatedTime,done,fileName,spentTime,targetVersion,author,parentTask],function (err,response) {
+                if (err) throw err;
+                file.mv(path.join(__dirname,`../public/images/uploaded_image/${fileName}`), function (err) {
+                    if (err) throw err;
+                    if (status == 'closed') {
+                        sql = `UPDATE issues SET closeddate = now() WHERE projectid=${idProject} AND issueid=${idIssue}`;
+                        pool.query(sql,function (err,response) {
+                            if (err) throw err;
+                            res.redirect('/projects/issue/' + idProject);
+                        })
+                    } else {
+                        res.redirect('/projects/issue/' + idProject);
+                    }
+                })
+            })
+        } else {
+            sql = `UPDATE issues SET tracker=$1,subject=$2,description=$3,status=$4,priority=$5,assignee=$6,startdate=$7,duedate=$8,estimatedtime=$9,done=$10,spenttime=$11,targetversion=$12,author=$13,updateddate=now(),parenttask=$14 WHERE projectid=${idProject} AND issueid=${idIssue}`
+            pool.query(sql,[tracker,subject,description,status,priority,assignee,startDate,dueDate,estimatedTime,done,spentTime,targetVersion,author,parentTask], function (err, response) {
+                if (err) throw err;
+                if (status == 'closed') {
+                    sql = `UPDATE issues SET closeddate = now() WHERE projectid=${idProject} AND issueid=${idIssue}`;
+                    pool.query(sql,function (err,response) {
+                        if (err) throw err;
+                        res.redirect('/projects/issue/' + idProject);
+                    })
+                } else {
+                    res.redirect('/projects/issue/' + idProject);
+                }
+            })
+        }
     })
 
     router.get('/member/:projectid',helper.isLoggedIn,function (req,res) {
@@ -299,7 +500,6 @@ module.exports = (pool) => {
                     })
                 }
 
-                console.log(arrayMembers);
                 sql = `SELECT projectoptions FROM projects WHERE projectid = $1`;
                 pool.query(sql, [idProject], function (err,response) {
                     if (err) throw err;
