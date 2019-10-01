@@ -281,12 +281,124 @@ module.exports = (pool) => {
 
     router.get('/overview/:projectid',helper.isLoggedIn,function (req,res) {
         let idProject = req.params.projectid;
-        res.render('projects/overview/index',{idProject});
+        let sql = `SELECT count(*) as total FROM issues WHERE tracker='bug' AND projectid=${idProject}`;
+        pool.query(sql, function (err,response) {
+            if (err) throw err;
+            let bugTotal = response.rows[0].total;
+            sql = `SELECT count(*) as total FROM issues WHERE tracker='bug' AND projectid=${idProject} AND status != 'closed'`;
+            pool.query(sql, function (err,response) {
+                if (err) throw err;
+                let bugTotalOpen = response.rows[0].total;
+                sql = `SELECT count(*) as total FROM issues WHERE tracker='feature' AND projectid=${idProject}`;
+                pool.query(sql, function (err,response) {
+                    if (err) throw err;
+                    let featureTotal = response.rows[0].total;
+                    sql = `SELECT count(*) as total FROM issues WHERE tracker='feature' AND projectid=${idProject} AND status != 'closed'`;
+                    pool.query(sql, function (err,response) {
+                        if (err) throw err;
+                        let featureTotalOpen = response.rows[0].total;
+                        sql = `SELECT count(*) as total FROM issues WHERE tracker='support' AND projectid=${idProject}`;
+                        pool.query(sql, function (err,response) {
+                            if (err) throw err;
+                            let supportTotal = response.rows[0].total;
+                            sql = `SELECT count(*) as total FROM issues WHERE tracker='support' AND projectid=${idProject} AND status != 'closed'`;
+                            pool.query(sql, function (err,response) {
+                                if (err) throw err;
+                                let supportTotalOpen = response.rows[0].total;
+                                sql = `SELECT users.fullname FROM (members INNER JOIN users ON members.userid = users.userid) WHERE members.projectid = ${idProject} ORDER BY users.userid`
+                                pool.query(sql, function (err,response) {
+                                    if (err) throw err;
+                                    let listUsers = response.rows;
+                                    res.render('projects/overview/index',{idProject,bugTotal,bugTotalOpen,featureTotal,featureTotalOpen,supportTotal,supportTotalOpen,listUsers});
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
     })
 
     router.get('/activity/:projectid',helper.isLoggedIn,function (req,res) {
+        const weekdays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
         let idProject = req.params.projectid;
-        res.render('projects/activity/index',{idProject});
+        let currentDate = new Date(Date.now());
+        let lastWeekDate = new Date(Date.now());
+        lastWeekDate.setDate(lastWeekDate.getDate()-6);
+
+        let startDate = new Date(Date.now());
+        let endDate = new Date(Date.now());
+        endDate.setDate(endDate.getDate()-6);
+        let arrayActivityObject = [];
+        let counter = 1;
+        while (startDate >= endDate) {
+            if (counter == 1) {
+                arrayActivityObject['Today'] = [];
+            } else {
+                arrayActivityObject[weekdays[startDate.getDay()]] = [];
+            }
+            startDate.setDate(startDate.getDate()-1);
+            counter++;
+        }
+
+        let sql = `SELECT * FROM activity WHERE ((time >= $1) AND (time <= $2)) AND projectid = $3 ORDER BY time DESC`;
+        pool.query(sql, [lastWeekDate,currentDate,idProject], function (err,response) {
+            if (err) throw err;
+            let activities = response.rows;
+            let todayDate = new Date(Date.now());
+            let authorArray = [];
+            let authorArrayPush = [];
+            for (let key in arrayActivityObject) {
+                authorArray[key] = [];
+            }
+
+            let counter = 0;
+            for (let i=0;i<activities.length;i++) {
+                let time = activities[i].time.getHours() + ':' + activities[i].time.getMinutes();
+                let title = activities[i].title;
+                let description = activities[i].description;
+                let author = activities[i].author;
+                let day = activities[i].time.getDay();
+                if (todayDate.getDay() == day) {
+                    day = 'Today';
+                } else {
+                    day = weekdays[day];
+                }
+                authorArray[day].push(author);
+                authorArrayPush.push(author);
+                arrayActivityObject[day].push({
+                    'Time'  :   time,
+                    'Title' :   title,
+                    'Description' : description,
+                    'Author'  :   author
+                })
+                counter++;
+            }
+
+            currentDate = convertDateToString(currentDate);
+            lastWeekDate = convertDateToString(lastWeekDate);
+
+            if (authorArrayPush.length > 0) {
+                sql = `SELECT userid,fullname FROM users WHERE userid IN (${authorArrayPush})`;
+                pool.query(sql, function (err,response) {
+                    if (err) throw err;
+                    let userMap = [];
+                    for (let i=0;i<response.rows.length;i++) {
+                        userMap[response.rows[i].userid] = response.rows[i].fullname;
+                    }
+                    for (let key in arrayActivityObject) {
+                        let activityObjects = arrayActivityObject[key];
+                        for (let i=0;i<activityObjects.length;i++) {
+                            arrayActivityObject[key][i]['Author'] = userMap[arrayActivityObject[key][i]['Author']];
+                        }
+                    }
+                    res.render('projects/activity/index',{idProject,arrayActivityObject,currentDate,lastWeekDate});
+                })
+            } else {
+                res.render('projects/activity/index',{idProject,arrayActivityObject,currentDate,lastWeekDate});
+            }
+        })
     })
 
     router.get('/issue/:projectid',helper.isLoggedIn,function (req,res) {
@@ -304,7 +416,7 @@ module.exports = (pool) => {
         pool.query(sql, stringConditionValue, function (err,response) {
             if (err) throw err;
 
-            let url = req.url == '/' ? '/projects/issue/' + idProject + '/?page=1' : '/projects' + req.url;
+            let url = req.url == ('/issue/' + idProject) ? '/projects/issue/' + idProject + '/?page=1' : '/projects' + req.url;
             let total = response.rows[0].total;
             let page = req.query.page || 1;
             let limit = 3;
@@ -440,10 +552,26 @@ module.exports = (pool) => {
                         sql = `UPDATE issues SET closeddate = now() WHERE projectid=${idProject} AND issueid=${idIssue}`;
                         pool.query(sql,function (err,response) {
                             if (err) throw err;
-                            res.redirect('/projects/issue/' + idProject);
+                            sql = `INSERT INTO activity(time,title,description,author,projectid) VALUES ($1,$2,$3,$4,$5)`;
+                            let time = new Date(Date.now());
+                            let title = subject + ' #' + idIssue + ' (' + status + ')';
+                            let description = done;
+                            let author = req.session.user.userid;
+                            pool.query(sql, [time,title,description,author,idProject], function (err,response) {
+                                if (err) throw err;
+                                res.redirect('/projects/issue/' + idProject);
+                            })
                         })
                     } else {
-                        res.redirect('/projects/issue/' + idProject);
+                        sql = `INSERT INTO activity(time,title,description,author,projectid) VALUES ($1,$2,$3,$4,$5)`;
+                        let time = new Date(Date.now());
+                        let title = subject + ' #' + idIssue + ' (' + status + ')';
+                        let description = done;
+                        let author = req.session.user.userid;
+                        pool.query(sql, [time,title,description,author,idProject], function (err,response) {
+                            if (err) throw err;
+                            res.redirect('/projects/issue/' + idProject);
+                        })
                     }
                 })
             })
@@ -455,10 +583,26 @@ module.exports = (pool) => {
                     sql = `UPDATE issues SET closeddate = now() WHERE projectid=${idProject} AND issueid=${idIssue}`;
                     pool.query(sql,function (err,response) {
                         if (err) throw err;
-                        res.redirect('/projects/issue/' + idProject);
+                        sql = `INSERT INTO activity(time,title,description,author,projectid) VALUES ($1,$2,$3,$4,$5)`;
+                        let time = new Date(Date.now());
+                        let title = subject + ' #' + idIssue + ' (' + status + ')';
+                        let description = done;
+                        let author = req.session.user.userid;
+                        pool.query(sql, [time,title,description,author,idProject], function (err,response) {
+                            if (err) throw err;
+                            res.redirect('/projects/issue/' + idProject);
+                        })
                     })
                 } else {
-                    res.redirect('/projects/issue/' + idProject);
+                    sql = `INSERT INTO activity(time,title,description,author,projectid) VALUES ($1,$2,$3,$4,$5)`;
+                    let time = new Date(Date.now());
+                    let title = subject + ' #' + idIssue + ' (' + status + ')';
+                    let description = done;
+                    let author = req.session.user.userid;
+                    pool.query(sql, [time,title,description,author,idProject], function (err,response) {
+                        if (err) throw err;
+                        res.redirect('/projects/issue/' + idProject);
+                    })
                 }
             })
         }

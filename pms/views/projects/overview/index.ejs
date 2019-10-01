@@ -51,6 +51,9 @@
               <a class="nav-link" href="/profile">Profile</a>
             </li>
             <li class="nav-item">
+              <a class="nav-link" href="/users">Users</a>
+            </li>
+            <li class="nav-item">
               <a href="/signout"><button class="btn btn-primary">Sign Out</button></a>
             </li>
           </ul>
@@ -62,14 +65,15 @@
         <h1>Library System</h1>
         Issue Tracking<br>
         <ul>
-          <li>Bug: 0 Open / 0</li>
-          <li>Feature : 2 Open / 6</li>
-          <li>Support : 1 Open / 1</li>
+          <li>Bug: <%= bugTotalOpen %> Open / <%= bugTotal %></li>
+          <li>Feature : <%= featureTotalOpen %> Open / <%= featureTotal %></li>
+          <li>Support : <%= supportTotalOpen %> Open / <%= supportTotal %></li>
         </ul>
         Members
         <ul>
-          <li>Rubi Henjaya</li>
-          <li>Reky Senjaya</li>
+          <% for (let i=0;i<listUsers.length;i++) { %>
+            <li><%= listUsers[i].fullname %></li>
+          <% } %>
         </ul>
       </div>
     </div>

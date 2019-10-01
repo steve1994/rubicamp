@@ -51,6 +51,9 @@
               <a class="nav-link" href="/profile">Profile</a>
             </li>
             <li class="nav-item">
+              <a class="nav-link" href="/users">Users</a>
+            </li>
+            <li class="nav-item">
               <a href="/signout"><button class="btn btn-primary" id="menu-toggle">Sign Out</button></a>
             </li>
           </ul>
@@ -59,6 +62,16 @@
 
       <div class="container-fluid">
         <!-- CONTENTS START HERE -->
+        Activity<br>
+        From <%= lastWeekDate %> to <%= currentDate %><br><br>
+        <% for (let key in arrayActivityObject) { %>
+          <%= key %><br>
+          <ul>
+            <% for (let i=0;i<arrayActivityObject[key].length;i++) { %>
+              <li><%= arrayActivityObject[key][i]['Time'] %> <%= arrayActivityObject[key][i]['Title'] %>: <%= arrayActivityObject[key][i]['Description'] %> %, author: <%= arrayActivityObject[key][i]['Author'] %></li>
+            <% } %>
+          </ul>
+        <% } %>
       </div>
     </div>
     <!-- /#page-content-wrapper -->
