@@ -17,6 +17,7 @@ const pool = new pg.Pool({
 var indexRouter = require('./routes/index');
 var projectsRouter = require('./routes/projects');
 var profileRouter = require('./routes/profile');
+var usersRouter = require('./routes/users');
 
 var app = express();
 
@@ -40,6 +41,7 @@ app.use(fileUpload());
 app.use('/', indexRouter(pool));
 app.use('/projects', projectsRouter(pool));
 app.use('/profile', profileRouter(pool));
+app.use('/users', usersRouter(pool));
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

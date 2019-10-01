@@ -111,7 +111,6 @@ module.exports = (pool) => {
         pool.query(sql,stringConditionValue,function (err,response) {
             if (err) throw err;
 
-            console.log(req.url);
             let url = req.url == '/' ? '/projects/?page=1' : '/projects' + req.url;
             let total = response.rows[0].total;
             let page = req.query.page || 1;
